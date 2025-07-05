@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Recuperar contraseña</title>
+</head>
+<body style="font-family: Arial, sans-serif; padding: 20px;font-size:16px;">
+	<div style="max-width: 600px; margin: auto;padding: 20px;">
+		<h2 style="color: #4CAF50;">Hola {{usuario}},</h2>
+		<p>Hemos recibido una solicitud para restablecer tu contraseña. Si fuiste tú, haz clic en el siguiente enlace para continuar:</p>
+		<p style="display:block;text-align:center;">
+			<a href="{{enlace}}" style="background:#222;color:#EEE;display:inline-block;padding:16px 32px;border-radius:8px;margin:8px auto;font-weight:600;text-decoration: none;">Restablecer contraseña</a>
+		</p>
+		<p>Este enlace vence en 10 minutos.</p>
+		<hr>
+		<p style="font-size: 12px; color: #999;">Si no solicitaste este correo, puedes ignorarlo. El enlace expirará automáticamente por seguridad.</p>
+		<p style="font-size: 12px; color: #999;">Staff de {{sitio}}.</p>
+	</div>
+</body>
+</html>

@@ -1,0 +1,14 @@
+*.css -crlf
+*.htaccess -crlf
+*.tpl -crlf
+*.html -crlf
+*.js -crlf
+*.less -crlf
+*.md -crlf
+*.php -crlf
+*.svg -crlf
+*.webp -crlf
+*.tpl -crlf
+*.txt -crlf
+*.xml -crlf
+*.mod -crlf

@@ -1,0 +1,21 @@
+append/
+
+# Ignorar todo el contenido de storage/
+storage/**
+
+# Pero incluir únicamente los archivos específicos que querés
+!storage/avatar/.htaccess
+!storage/avatar/avatar.webp
+!storage/.version
+
+# Ignora todos los archivos con extensión .key )
+.key
+
+# Ignora todos los archivos con extensión .lock 
+.lock
+
+# Ignora todos los archivos con extensión .log
+.log
+
+# Ignora el archivo de configuración sensible 'config.inc.php'
+config.inc.php
