@@ -120,12 +120,12 @@ class Container {
    }
 
    /**
-    * Resuelve automáticamente un DTO basado en su nombre,
+    * Resuelve automáticamente basado en su nombre,
     * cargando el archivo y resolviendo sus dependencias por tipo.
     *
-    * @param string $name Nombre del DTO (sin 'DTO' al final).
+    * @param string $name Nombre
     * @throws RuntimeException En caso de archivo o clase inexistente, o si no se pueden resolver dependencias.
-    * @return object Instancia del DTO.
+    * @return object Instancia del Data Transfer Object.
     */
    public function resolve(string $className): object {
       $file = $this->basePath . 'dependencies/' . $className . '.php';
