@@ -94,8 +94,8 @@ class Blueprint {
       return $this->addColumn("text", $name);
    }
 
-   public function char(string $name): Column {
-      return $this->addColumn("char", $name);
+   public function char(string $name, int $length = 0): Column {
+      return $this->addColumn("char($length)", $name);
    }
 
    public function tinyText(string $name): Column {
