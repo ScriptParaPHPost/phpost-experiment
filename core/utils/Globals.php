@@ -21,7 +21,7 @@ class Globals {
 	}
 
 	public function getVersion(string $type = ''): string {
-		$version['version'] = file_get_contents(__DIR__ . '/../../.version');
+		$version['version'] = file_get_contents(__DIR__ . '/../../storage/.version');
 		$version['code'] = str_replace('.', '_', $version['version']);
 		return $version[$type];
 	}

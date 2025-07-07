@@ -8,14 +8,11 @@
  * @copyright 2011-2025
  */
 
-if(file_exists(__DIR__.'/../.lock') && file_exists(__DIR__.'/../.key')) header("Location: ../");
+if(file_exists(__DIR__.'/../storage/.lock') && file_exists(__DIR__.'/../storage/.key')) header("Location: ../");
 
 define('PHPOST_CORE_LOADED', TRUE);
 
-require_once __DIR__ . '/../inc/utils/Avatar.php';
-$Avatar = new Avatar;
-
-require_once __DIR__ . '/../inc/utils/Globals.php';
+require_once __DIR__ . '/../core/utils/Globals.php';
 $Globals = new Globals;
 
 require_once __DIR__ . '/utils.php';
@@ -59,19 +56,19 @@ switch ($step) {
 		$permisos = [
 			'config' => [
 				'path' => 'config.inc.php',
-				'root' => '/../config.inc.php'
+				'root' => '/../storage/config.inc.php'
 			],
 			'cache' => [
 				'path' => 'cache',
-				'root' => '/../files/cache/'
+				'root' => '/../storage/cache/'
 			],
 			'avatar' => [
 				'path' => 'avatar',
-				'root' => '/../files/avatar/'
+				'root' => '/../storage/avatar/'
 			],
 			'uploads' => [
 				'path' => 'uploads',
-				'root' => '/../files/uploads/'
+				'root' => '/../storage/uploads/'
 			]
 		];
 		foreach($permisos as $key => $permiso) {
@@ -113,32 +110,16 @@ switch ($step) {
 				$mysqli = $utils->dbConnect($db);
 
 				# Obtenemos el contenido del archivo
-				$filename = file_get_contents(__DIR__ . '/../config.inc.php');
+				$filename = file_get_contents(__DIR__ . '/../storage/config.inc.php');
 				# Reemplazamos el contenido por el nuevo
 				$replace = str_replace(['dbhost', 'dbuser', 'dbpass', 'dbname'], $db, $filename);
 				# Guardamos el nuevo contenido
-				file_put_contents(__DIR__ . '/../config.inc.php', $replace);
+				file_put_contents(__DIR__ . '/../storage/config.inc.php', $replace);
 
-				# Antes comprobamos que no este instalado
-				if($results = $mysqli->query("SHOW TABLES")) {
-					# Eliminamos todas las tablas existentes
-					while ($row = $results->fetch_row()) $mysqli->query("DROP TABLE {$row[0]}");
-					$results->close();
-				}
-
-				# Añadimos la base de datos
-				require_once __DIR__ . '/../inc/migration/database.php';
-				$error = '';
-				foreach($phpost_mysqli as $table => $sql) {
-					if($mysqli->query($sql)) {
-						$execute[$table] = 1;
-					} else {
-						$execute[$table] = 0;
-						$error .= '<br/>' . $mysqli->error;
-					}
-				}
+				$fresh = true;
+				require_once __DIR__ . '/../core/database/migrar.php';
 				
-				if (in_array(1, $execute, true) && $_SESSION['TERMS_ACCEPTED']) {
+				if ($next && $_SESSION['TERMS_ACCEPTED']) {
 					header("Location: index.php?step=3");
 				} else {
 					$message = 'Lo sentimos, pero ocurrió un problema. Inténtalo nuevamente; borra las tablas que se hayan guardado en tu base de datos: ' . $error;
@@ -166,7 +147,7 @@ switch ($step) {
 				$message = 'Todos los campos deben estar completos';
 			}
 			# Cargamos el archivo de conexion
-			$req = require_once __DIR__ . '/../config.inc.php';
+			$req = require_once __DIR__ . '/../storage/config.inc.php';
 			
 			# Iniciamos la conexión con la base de datos
 			try {
@@ -218,7 +199,7 @@ switch ($step) {
 
 		if($_SERVER['REQUEST_METHOD'] === 'POST') {
 
-			require_once __DIR__ . '/../inc/utils/passwordManager.php';
+			require_once __DIR__ . '/../core/utils/passwordManager.php';
 			$pm = new PasswordManager(12); 
 
 			if(in_array('', $user, true)) {
@@ -241,7 +222,7 @@ switch ($step) {
 				$hash = $pm->hash($user['password']);
 				$fecha = time();
 				# Cargamos el archivo de conexion
-				$req = require_once __DIR__ . '/../config.inc.php';
+				$req = require_once __DIR__ . '/../storage/config.inc.php';
 				
 				# Iniciamos la conexión con la base de datos
 				try {
@@ -250,7 +231,18 @@ switch ($step) {
 						$mysqli = $utils->dbConnect($req['db']);
 						$mysqli->query("INSERT INTO `u_miembros` (`user_name`, `user_password`, `user_email`, `user_rango`, `user_registro`, `user_puntosxdar`, `user_activo`) VALUES ('{$user['username']}', '$hash', '{$user['email']}', 1, $fecha, 50, 1)");
 						$uid = (int)$mysqli->insert_id;
-						$Avatar->get((int)$uid, $user['username']);
+
+						$path_user_uid = "UID_{$uid}";
+				      $directory = __DIR__ . '/../storage/avatar/' . $path_user_uid;
+				      // Crear carpeta si no existe
+				      if (!is_dir($directory)) {
+				         mkdir($directory, 0777, true);
+				         chmod($directory, 0777);
+				      }
+				      // Generar avatar desde API externa
+				      $download_file = "https://ui-avatars.com/api/?name=" . urlencode($user['username']) . "&background=random&size=180&font-size=0.60&length=2&format=webp";
+				      copy($download_file, $directory . '/default.webp');
+
 						$mysqli->query("INSERT INTO u_perfil (user_id) VALUES ($uid)");
 						$mysqli->query("INSERT INTO u_portal (user_id) VALUES ($uid)");
 						// UPDATE
@@ -283,7 +275,7 @@ switch ($step) {
 		if($_SESSION['TERMS_ACCEPTED'] && $next) {
 
 			# Cargamos el archivo de conexion
-			$req = require_once __DIR__ . '/../config.inc.php';
+			$req = require_once __DIR__ . '/../storage/config.inc.php';
 			
 			# Iniciamos la conexión con la base de datos
 			try {

@@ -10,7 +10,7 @@ class Utils {
 
 		// Por defecto carga desde config.inc.php
 		if (empty($credentials)) {
-			$config = require __DIR__ . '/../../config.inc.php';
+			$config = require __DIR__ . '/../../storage/config.inc.php';
 			$credentials = $config['db'] ?? [];
 		}
 
