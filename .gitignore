@@ -2,6 +2,7 @@ append/
 
 # Ignorar todo el contenido de storage/
 storage/**
+strorage/avatar/UID_*/
 
 # Pero incluir únicamente los archivos específicos que querés
 !storage/avatar/.htaccess
