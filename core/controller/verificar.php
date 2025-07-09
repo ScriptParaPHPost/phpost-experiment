@@ -18,7 +18,7 @@ $PB->title = ($type === 1 ? "Recuperar contrase&ntilde;a " : "Validar cuenta ") 
 
 $tsVerificar = $container->loader(
 	'class/c.verificar.php', 'tsVerificar', 
-	fn($c) => new tsVerificar($c->get('tsCore'), $c->get('Junk'), $c->get('PasswordManager'))
+	fn($c) => new tsVerificar($c->resolve('Verificar'))
 );
 
 $action = ($type === 1 ? 'password' : 'validar');

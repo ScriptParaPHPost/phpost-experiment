@@ -15,21 +15,17 @@ if (!defined('PHPOST_CORE_LOADED')) {
 	exit('Acceso denegado: ¡No puedes acceder este script directamente!');
 }
 
-require_once __DIR__ . '/../utils/globals.php';
-
 class tsAuthentication {
 
 	protected tsCore $tsCore;
 
 	protected tsUser $tsUser;
 
-	public tsSession $session;
+	protected tsSession $session;
 
 	protected Junk $Junk;
 
 	protected PasswordManager $PasswordManager;
-
-	protected Globals $Globals;
 
 	public $uid;
 
@@ -39,7 +35,6 @@ class tsAuthentication {
 	  	$this->session = $deps->tsSession;
 		$this->Junk = $deps->Junk;
 		$this->PasswordManager = $deps->PasswordManager;
-		$this->Globals = new Globals;
 	  	$this->setSession();
 	}
 
@@ -120,11 +115,12 @@ class tsAuthentication {
 		$redirectTo = $this->tsCore->settings['url'] . (is_string($redirectTo) ? $redirectTo : '/');
 		return json_encode(['status' => true, 'message' => 'Inicio de sesión exitoso', 'redirect' => $redirectTo]);
 	}
+
 	/*
 		CERRAR SESSION
 		logoutUser($redirectTo)
 	*/
-	function logoutUser($user_id, string $redirectTo = '/') {
+	public function logoutUser($user_id, string $redirectTo = '/') {
 		$this->session->read();
 		$this->session->destroy();
 		/* LIMPIAR VARIABLES */
@@ -132,41 +128,10 @@ class tsAuthentication {
 		$this->is_member = 0;
 		# UPDATE
 		$last_active = (time() - (((int)$this->tsCore->settings['c_last_active'] * 60) * 3));
-		db_exec([__FILE__, __LINE__], 'query', 'UPDATE u_miembros SET user_lastactive \''.$last_active.'\' WHERE user_id = \''.(int)$user_id.'\'');
+		db_exec([__FILE__, __LINE__], 'query', "UPDATE u_miembros SET user_lastactive = $last_active WHERE user_id = $user_id");
 		/* REDERIGIR */
 		if($redirectTo != NULL) $this->tsCore->redirectTo($redirectTo);	// REDIRIGIR
 		else return true;
-	}
-
-	public function verifyEmail(string $email = '', string $action = '') {
-		$user_info = db_exec([__FILE__, __LINE__], 'query', "SELECT user_id, user_name, user_registro, user_activo FROM u_miembros WHERE user_email = '$email'");
-		if(!db_exec('num_rows', $user_info)) {
-			return 'El email no se encuentra registrado.';
-		}
-		$tsData = db_exec('fetch_assoc', $user_info);
-		if((int)$tsData['user_activo'] === 1 && $action === 'recover-account') {
-			return 'La cuenta ya se encuentra activada';
-		}
-		return $tsData;
-	}
-
-	public function recover(int $uid = 0, string $email = '', int $type = 0, int $key = 0) {
-		return (db_exec([__FILE__, __LINE__], 'query', "INSERT INTO w_contacts (user_id, user_email, `time`, `type`, `hash`) VALUES ($uid, '$email', {$this->Junk->setTime()}, $type, '$key')"));
-	}
-
-	public function sendEmail(array $tsData = [], array $data = []) {
-		$to = $tsData['user_email'];
-		if(!$this->Globals->enviar($to,
-		   [
-		   	'usuario' => $tsData['user_name'],
-		      'sitio' => $this->tsCore->settings['titulo'],
-		      'enlace' => "{$this->tsCore->settings['url']}/{$data['page']}/{$data['key']}/{$data['type']}/$to",
-		      'protocolo' => "{$this->tsCore->settings['url']}/pages/protocolo/"
-		   ],
-		   $data['plantilla'],
-		   $data['asunto']
-		)) return 'Hubo un error al intentar procesar lo solicitado';
-		return $data['mensaje'];
 	}
 
 	/*

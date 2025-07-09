@@ -35,9 +35,9 @@ if(!$tsLevelMsg) {
 }
 	
 // CLASE
-$tsAuthentication = $container->loader('class/c.authentication.php', 'tsAuthentication', fn($c) => new tsAuthentication($c->resolve('Authentication')));
-
-$tsRegistro = $container->loader('class/c.registro.php', 'tsRegistro', fn($c) => new tsRegistro($c->resolve('Registro')));
+$tsRegistro = $container->loader('class/c.registro.php', 'tsRegistro', 
+	fn($c) => new tsRegistro($c->resolve('Registro'))
+);
 	
 // CODIGO
 switch($action) {

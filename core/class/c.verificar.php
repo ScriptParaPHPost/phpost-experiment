@@ -15,7 +15,7 @@ if (!defined('PHPOST_CORE_LOADED')) {
 	exit('Acceso denegado: ¡No puedes acceder este script directamente!');
 }
 
-require_once __DIR__ . '/../utils/globals.php';
+require_once __DIR__ . '/../class/c.email.php';
 
 class tsVerificar {
 
@@ -23,7 +23,7 @@ class tsVerificar {
 
 	protected Junk $Junk;
 
-	protected Globals $Globals;
+	protected tsEmail $Email;
 
 	protected PasswordManager $PasswordManager;
 
@@ -31,11 +31,11 @@ class tsVerificar {
 
 	private int $limitLife = 600; // 10 Min
 
-	public function __construct(tsCore $tsCore, Junk $Junk, PasswordManager $PasswordManager) {
-		$this->tsCore = $tsCore;
-		$this->Junk = $Junk;
-		$this->PasswordManager = $PasswordManager;
-		$this->Globals = new Globals;
+	public function __construct(Verificar $deps, Config $config) {
+		$this->tsCore = $deps->tsCore;
+		$this->Junk = $deps->Junk;
+		$this->PasswordManager = $deps->PasswordManager;
+		$this->Email = new tsEmail($config->get('mail'));
 	}
 
 	public function verifyEmail(string $email = '', string $action = '') {
@@ -45,8 +45,8 @@ class tsVerificar {
 			return 'El email no se encuentra registrado.';
 		}
 		$user_info = db_exec('fetch_assoc', $user_info);
-		if((int)$user_info['user_activo'] === 1 && $action !== 'password') {
-			return 'La cuenta ya se encuentra activada1';
+		if((int)$user_info['user_activo'] === 1 && $action !== 'verificar-password') {
+			return 'La cuenta ya se encuentra activada.';
 		}
 		return $user_info;
 	}
@@ -57,15 +57,15 @@ class tsVerificar {
 
 	public function sendEmail(array $tsData = [], array $data = []) {
 		$to = $tsData['user_email'];
-		if(!$this->Globals->enviar($to,
+		$this->Email->asunto = $data['asunto'];
+		$this->Email->plantilla = $data['plantilla'];
+		if(!$this->Email->enviar($to,
 		   [
 		   	'usuario' => $tsData['user_name'],
 		      'sitio' => $this->tsCore->settings['titulo'],
 		      'enlace' => "{$this->tsCore->settings['url']}/{$data['page']}/{$data['key']}/{$data['type']}/$to",
 		      'protocolo' => "{$this->tsCore->settings['url']}/pages/protocolo/"
-		   ],
-		   $data['plantilla'],
-		   $data['asunto']
+		   ]
 		)) return 'Hubo un error al intentar procesar lo solicitado';
 		return $data['mensaje'];
 	}
@@ -73,9 +73,9 @@ class tsVerificar {
 	public function delContactsOld($tsData) {
 		if(!is_array($tsData)) return true;
 		$time = $this->Junk->setTime() - $this->limitLife; // 10 Minutos
-		db_exec([__FILE__, __LINE__], 'query', "DELETE FROM `w_contacts` WHERE `time` < $time");
+		#db_exec([__FILE__, __LINE__], 'query', "DELETE FROM `w_contacts` WHERE `time` < $time");
 		// EXISTE?
-		return count($tsData) < 4;
+		return true;#count($tsData) < 4;
 	}
 
 	public function verifyCode(string $email = '', int $code = 0, int $type = 0) {

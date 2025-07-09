@@ -16,7 +16,7 @@ if (!defined('PHPOST_CORE_LOADED')) {
 	exit('Acceso denegado: ¡No puedes acceder este script directamente!');
 }
 
-require_once __DIR__ . '/../utils/Globals.php';
+require_once __DIR__ . '/../class/c.email.php';
 
 class tsRegistro {
 
@@ -26,9 +26,9 @@ class tsRegistro {
 
 	protected Junk $Junk;
 
-	protected Globals $Globals;
+	protected tsEmail $Email;
 
-	protected PasswordManager $PM;
+	protected PasswordManager $PasswordManager;
 
 	protected Avatar $Avatar;
 
@@ -36,9 +36,9 @@ class tsRegistro {
 		$this->tsCore = $deps->tsCore;
 		$this->tsAuthentication = $deps->tsAuthentication;
 		$this->Junk = $deps->Junk;
-		$this->PM = $deps->PasswordManager;
+		$this->PasswordManager = $deps->PasswordManager;
 		$this->Avatar = $deps->Avatar;
-		$this->Globals = new Globals;
+		$this->Email = new tsEmail($deps->Config->get('mail'));
 	}
 
 	/**
@@ -122,7 +122,7 @@ class tsRegistro {
 	}
 
 	private function insertUserToDB(array $tsData = []) {
-		$createKey = $this->PM->hash($tsData['user_password']);
+		$createKey = $this->PasswordManager->hash($tsData['user_password']);
 		$rango = (int)$this->tsCore->settings['c_reg_rango'] ?? 3;
 		return db_exec([__FILE__, __LINE__], 'query', "INSERT INTO `u_miembros` (`user_name`, `user_password`, `user_email`, `user_rango`, `user_registro`) VALUES ('{$tsData['user_nickname']}', '$createKey', '{$tsData['user_email']}', $rango, {$tsData['user_registro']})");
 	}
@@ -177,29 +177,29 @@ class tsRegistro {
 			$key = substr(md5(time()), 0, 32);
 			if(db_exec([__FILE__, __LINE__], 'query', "INSERT INTO w_contacts (user_id, user_email, time, type, hash) VALUES ((int){$tsData['user_id']}, '{$tsData['user_email']}', $now, 2, '$key')")) {
 				// DAMOS BIENVENIDA POR CORREO
-				if(!$this->Globals->enviar($to,
+				$this->Email->asunto = 'Active su cuenta';
+				$this->Email->plantilla = 'activar_cuenta';
+				if(!$this->Email->enviar($to,
 				   [
 				      'usuario' => $tsData['user_nickname'],
 				      'password' => $tsData['user_password'],
 				      'sitio' => $this->tsCore->settings['titulo'],
 				      'enlace' => "{$this->tsCore->settings['url']}/validar/$key/2/{$tsData['user_email']}",
 				      'protocolo' => "{$this->tsCore->settings['url']}/pages/protocolo/"
-				   ],
-				   'activar_cuenta',
-				   'Active su cuenta'
+				   ]
 				)) return ['success' => false, 'message' => 'Hubo un error al intentar procesar lo solicitado'];
 				return ['success' => true, 'message' => "Te hemos enviado un correo a <b>$to</b> con los ultimos pasos para finalizar con el registro.\n\nSi en los proximos minutos no lo encuentras en tu bandeja de entrada, por favor, revisa tu carpeta de correo no deseado, es posible que se haya filtrado.\n\nMuchas gracias"];	
 			}
 		} else {
-			$this->Globals->enviar($to,
+			$this->Email->asunto = "Bienvenido a {$this->tsCore->settings['titulo']}";
+			$this->Email->plantilla = 'bienvenida_usuario';
+			$this->Email->enviar($to,
 			   [
 			      'usuario' => $tsData['user_nickname'],
 			      'password' => $tsData['user_password'],
 			      'sitio' => $this->tsCore->settings['titulo'],
 			      'enlace' => $this->tsCore->settings['url']
-			   ],
-			   'bienvenida_usuario',
-			   "Bienvenido a {$this->tsCore->settings['titulo']}"
+			   ]
 			);
 			$this->tsAuthentication->userActivate($tsData['user_id'], md5((string)$tsData['user_registro']));
 			$this->tsAuthentication->loginUser(true, $tsData['user_nickname'], $tsData['user_password']);

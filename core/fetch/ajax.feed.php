@@ -47,12 +47,10 @@ $code = [
 ];
 $key = base64_encode(serialize($code));
 
-require_once __DIR__ . '/../../utils/globals.php';
-$container->set('Globals', fn() => new Globals());
-$Globals = $container->get('Globals');
+$Config = $container->get('Config');
 
-$version_now = 'PHPost v' . $Globals->getVersion('version');
-$version_code = 'phpost_v' . $Globals->getVersion('code');
+$version_now = 'PHPost v' . $Config->get('version');
+$version_code = 'phpost_v' . str_replace('.', '_', $Config->get('version'));
 
 // CODIGO
 switch($action) {

@@ -37,7 +37,7 @@ if (!isset($action)) {
 
 $tsVerificar = $container->loader(
 	'class/c.verificar.php', 'tsVerificar', 
-	fn($c) => new tsVerificar($c->get('tsCore'), $c->get('Junk'), $c->get('PasswordManager'))
+	fn($c) => new tsVerificar($c->resolve('Verificar'))
 );
 
 $email = $tsCore->setSecure(filter_input(INPUT_POST, 'email', FILTER_SANITIZE_EMAIL));
@@ -55,6 +55,7 @@ $page = ((int)$type === 1) ? 'password' : 'validar';
 $message = ((int)$type === 1)
 	? "Las intrucciones para recuperar su contrase&ntilde;a de $email, si no aparece el e-mail en su bandeja de entrar, revise en correo no deseado porque puede haberse filtrado."
 	: "Te hemos enviado un correo a $email con los pasos para continuar.\n\nSi en los proximos minutos no lo encuentras en tu bandeja de entrada, por favor, revisa tu carpeta de correo no deseado, es posible que se haya filtrado.\n\nMuchas gracias";
+
 
 if($tsVerificar->verifyToDB((int)$tsData['user_id'], $email, $type, $key)) {
 	echo $tsVerificar->sendEmail($tsData, [

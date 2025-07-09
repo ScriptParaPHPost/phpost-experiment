@@ -13,9 +13,19 @@ return new class extends Migration {
          $table->integer('date')->unsigned()->default(0);
          $table->string('mod_ip', 45)->default('');
       });
+
+      Schema::create('w_contacts', function (Blueprint $table) {
+         $table->id('id');
+         $table->integer('user_id')->unsigned()->default(0);
+         $table->string('user_email', 60)->default('');
+         $table->integer('time')->unsigned()->default(0);
+         $table->tinyInteger('type')->default(0);
+         $table->string('hash', 12)->default('');
+      });
    }
 
    public function down(): void {
       Schema::dropIfExists('w_historial');
+      Schema::dropIfExists('w_contacts');
    }
 };

@@ -1,3 +1,4 @@
+import { Echo } from './plugins/Echo.js';
 import { FetchSend } from './plugins/FetchSend.js';
 import { Input, ShowPassword } from './plugins/input.js';
 import { Modal } from './plugins/Modal.js';
@@ -40,7 +41,7 @@ import { Modal } from './plugins/Modal.js';
 					title: 'Hubo un problema',
 					content: response.message,
 					onContinue: () => {
-						window.location.href = response.redirect;
+						window.location.href = location.href;
 					}
 				});
 			}
