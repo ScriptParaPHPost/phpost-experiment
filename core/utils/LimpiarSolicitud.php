@@ -5,11 +5,12 @@
  * 
  * Seguridad básica para limpiar solicitudes HTTP
  * 
- * @author    Miguel92
- * @license   MIT
- * @link      https://github.com/joelmiguelvalente
- * @link      https://www.linkedin.com/in/joelmiguelvalente/
- */
+ * @author      PHPost Team
+ * @copyright   2025
+ * @link        http://github.com/isidromlc/PHPost
+ * @link        http://github.com/joelmiguelvalente
+ * @link        https://www.linkedin.com/in/joelmiguelvalente/
+*/
 
 class LimpiarSolicitud {
 

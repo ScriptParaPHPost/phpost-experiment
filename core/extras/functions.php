@@ -12,12 +12,12 @@
 if (!defined('PHPOST_CORE_LOADED')) 
    exit('Acceso denegado: ¡No puedes acceder este script directamente!');
 
-$container->loader(
+$Config = $container->loader(
    'utils/Config.php', 'Config', 
    fn() => new Config(__DIR__ . '/../../storage/config.inc.php')
 );
 
-$dev = $container->get('Config')->get('dev');
+$dev = $Config->get('dev');
 
 if (!isset($tsUser) || !is_object($tsUser)) {
    $tsUser = new stdClass();
@@ -34,10 +34,10 @@ try {
     * @link https://www.php.net/manual/es/mysqli.construct.php
    */
    $mysqli = new mysqli(
-      $container->get('Config')->get('db.hostname'), 
-      $container->get('Config')->get('db.username'), 
-      $container->get('Config')->get('db.password'), 
-      $container->get('Config')->get('db.database')
+      $Config->get('db.hostname'), 
+      $Config->get('db.username'), 
+      $Config->get('db.password'), 
+      $Config->get('db.database')
    );
 
    // Comprobar el estado de la conexión
@@ -45,7 +45,7 @@ try {
       throw new Exception("Falló la conexión con MySQL: ({$mysqli->connect_errno}) {$mysqli->connect_error}");
    }
    // Establecer el juego de caracteres utf8
-   if (!$mysqli->set_charset( $container->get('Config')->get('db.charset') )) {
+   if (!$mysqli->set_charset( $Config->get('db.charset') )) {
       throw new Exception('No se pudo establecer la codificación de caracteres.');
    }
 } catch (Exception $e) {

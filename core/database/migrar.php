@@ -1,10 +1,10 @@
 <?php
 
-if(!$fresh) {
+if(isset($fresh)) {
+	$refresh = true;
+} else {
 	$argv = $_SERVER['argv'];
 	$refresh = in_array('--refresh', $argv) || in_array('refresh', $argv);
-} else {
-	$refresh = true;
 }
 require_once __DIR__ . '/src/Schema.php';
 require_once __DIR__ . '/src/Migration.php';

@@ -8,15 +8,27 @@
  * @copyright 2011-2025
  */
 
-if(file_exists(__DIR__.'/../storage/.lock') && file_exists(__DIR__.'/../storage/.key')) header("Location: ../");
-
 define('PHPOST_CORE_LOADED', TRUE);
 
-require_once __DIR__ . '/../core/utils/Globals.php';
-$Globals = new Globals;
+# Muy importante
+$FileConfig = __DIR__ . '/../storage/config.inc.php';
+if(!file_exists($FileConfig)) {
+	copy(__DIR__ . '/example.php', $FileConfig);
+	chmod($FileConfig, 0666);
+}
 
+# Incluimos los archivos necesarios
+require_once __DIR__ . '/../core/utils/Config.php';
+require_once __DIR__ . '/../core/database/DB.php';
 require_once __DIR__ . '/utils.php';
-$utils = new Utils;
+require_once __DIR__ . '/componentes.php';
+
+# Inicializamos las clases
+$Config = new config($FileConfig);
+$Utils = new Utils($Config->get('db'));
+$Component = new Componentes;
+
+$Utils->isInstalled();
 
 ini_set('display_errors', 1);
 ini_set('log_errors', 1);
@@ -27,104 +39,81 @@ error_reporting(E_ALL ^ E_WARNING);
 session_name('INSTALLER');
 session_start();
 
+$version = "{$Config->get('app.name')} v{$Config->get('app.version')}";
 // Config app
-$config = [
-	'script' => [
-		'name' => 'PHPost v4',
-		'slogan' => 'Script actualizado',
-		'version' => 'PHPost v' . $Globals->getVersion('version'),
-		'version_code' => 'phpost_v' . $Globals->getVersion('code')
-	],
+$SettingsDefault = [
+	'slogan' => 'Script actualizado',
 	'pkey' => '6LfFFiMdAAAAAAQjDafWXZ0FeyesKYjVm4DSUoao',
 	'skey' => '6LfFFiMdAAAAAFIP4oNFLQx5Fo1FyorTzNps8ChE',
 ];
 
-$step = (int)filter_input(INPUT_GET, 'step', FILTER_SANITIZE_NUMBER_INT) ?? 0;
+$step = (int)$Utils->sanitizer('step', INPUT_GET);
 $next = true; // CONTINUAR
 $message = '';
 
 switch ($step) {
 	case 0:
 		$license = file_get_contents(__DIR__ . '/../LICENSE');
-		$_SESSION['TERMS_ACCEPTED'] = filter_input(INPUT_POST, 'license', FILTER_VALIDATE_BOOLEAN);
-		if($_SERVER['REQUEST_METHOD'] === 'POST' && $_SESSION['TERMS_ACCEPTED']) {
+		$_SESSION['TERMS_ACCEPTED'] = $Utils->sanitizer('license');
+		if($Utils->isMethodPost() && $_SESSION['TERMS_ACCEPTED']) {
 			header("Location: ?step=1&license=ok");
+			exit;
 		}
 	break;
 	case 1:
 		if(!$_SESSION['TERMS_ACCEPTED']) header("Location: ./index.php");
 		$permisos = [
-			'config' => [
-				'path' => 'config.inc.php',
-				'root' => '/../storage/config.inc.php'
-			],
-			'cache' => [
-				'path' => 'cache',
-				'root' => '/../storage/cache/'
-			],
-			'avatar' => [
-				'path' => 'avatar',
-				'root' => '/../storage/avatar/'
-			],
-			'uploads' => [
-				'path' => 'uploads',
-				'root' => '/../storage/uploads/'
-			]
+			'config'  => ['root' => '/../storage/config.inc.php'],
+			'cache' 	 => ['root' => '/../storage/cache/'],
+			'avatar'  => ['root' => '/../storage/avatar/'],
+			'uploads' => ['root' => '/../storage/uploads/']
 		];
 		foreach($permisos as $key => $permiso) {
-			if(!file_exists(__DIR__ . $permiso['root']) && $key === 'config') {
-				copy(__DIR__ . '/example.php', __DIR__ . $permiso['root']);
-				chmod(__DIR__ . $permiso['root'], 0666);
-			} elseif(!is_dir(__DIR__ . $permiso['root']) && $key !== 'config') {
+			if(!is_dir(__DIR__ . $permiso['root']) && $key !== 'config') {
 				mkdir(__DIR__ . $permiso['root'], 0777);
 			}
 			$permisos[$key]['chmod'] = (int)substr(sprintf('%o', fileperms(__DIR__ . $permiso['root'])), -3);
-			$permisos[$key]['status'] = 'success';
+			$permisos[$key]['status'] = 'green';
 			if($key === 'config' && $permisos[$key]['chmod'] !== 666) {
-				$permisos[$key]['status'] = 'danger';
+				$permisos[$key]['status'] = 'red';
 				$next = false;
 			} elseif($key !== 'config' && $permisos[$key]['chmod'] !== 777) {
-				$permisos[$key]['status'] = 'danger';
+				$permisos[$key]['status'] = 'red';
 				$next = false;
 			}
 		}
-		
-		if(($_SERVER['REQUEST_METHOD'] === 'POST' && $_SESSION['TERMS_ACCEPTED']) || $next) {
+		if(($Utils->isMethodPost() && $_SESSION['TERMS_ACCEPTED']) || $next) {
 			header("Location: ?step=" . ($next ? 2 : 1));
+			exit;
 		}
 	break;
 	case 2:
 		if(!$_SESSION['TERMS_ACCEPTED']) header("Location: ./index.php");
-
-		$db = [
-			'hostname' => filter_input(INPUT_POST, 'dbhost', FILTER_UNSAFE_RAW) ?? '',
-			'username' => filter_input(INPUT_POST, 'dbuser', FILTER_UNSAFE_RAW) ?? '',
-			'password' => filter_input(INPUT_POST, 'dbpass', FILTER_UNSAFE_RAW) ?? '',
-			'database' => filter_input(INPUT_POST, 'dbname', FILTER_UNSAFE_RAW) ?? ''
-		];
+		$db = $Utils->sanitizer(['hostname', 'username', 'password', 'database']);
 		$next = false;
-
-		if($_SERVER['REQUEST_METHOD'] === 'POST') {
-
+		if($Utils->isMethodPost()) {
 			try {
-				$mysqli = $utils->dbConnect($db);
-
-				# Obtenemos el contenido del archivo
-				$filename = file_get_contents(__DIR__ . '/../storage/config.inc.php');
-				# Reemplazamos el contenido por el nuevo
-				$replace = str_replace(['dbhost', 'dbuser', 'dbpass', 'dbname'], $db, $filename);
+				// Solo para saber si exite la tabla y si se puede conectar
+				$isConn = new DB($db);
+				$rendered = $Utils->renderConfigTemplate($FileConfig, $db);
+				if ($rendered === false) {
+					$next = false;
+					throw new RuntimeException('No se pudo procesar el archivo de configuración.');
+				}
 				# Guardamos el nuevo contenido
-				file_put_contents(__DIR__ . '/../storage/config.inc.php', $replace);
-
+				if(file_put_contents($FileConfig, $rendered) === false) {
+					$next = false;
+					throw new RuntimeException('No se pudo guardar la configuración.');
+				}
 				$fresh = true;
 				require_once __DIR__ . '/../core/database/migrar.php';
 				
 				if ($next && $_SESSION['TERMS_ACCEPTED']) {
 					header("Location: index.php?step=3");
+					exit;
 				} else {
 					$message = 'Lo sentimos, pero ocurrió un problema. Inténtalo nuevamente; borra las tablas que se hayan guardado en tu base de datos: ' . $error;
-				}
-
+				}	
 			} catch (Exception $e) {
 				$message = $e->getMessage();
 				$next = false;
@@ -133,75 +122,84 @@ switch ($step) {
 	break;
 	case 3:
 		if(!$_SESSION['TERMS_ACCEPTED']) header("Location: ./index.php");
-		$site = [
-			'titulo' => filter_input(INPUT_POST, 'titulo', FILTER_SANITIZE_SPECIAL_CHARS) ?? '',
-			'slogan' => filter_input(INPUT_POST, 'slogan', FILTER_SANITIZE_SPECIAL_CHARS) ?? '',
-			'email' => filter_input(INPUT_POST, 'email', FILTER_VALIDATE_EMAIL) ?? '',
-			'url' => filter_input(INPUT_POST, 'url', FILTER_VALIDATE_URL) ?? $utils->getUrl(),
-			'pkey' => filter_input(INPUT_POST, 'pkey', FILTER_UNSAFE_RAW) ?? '',
-			'skey' => filter_input(INPUT_POST, 'skey', FILTER_UNSAFE_RAW) ?? ''
-		];
+		$site = $Utils->sanitizer(['titulo', 'slogan', 'email', 'url', 'pkey', 'skey']);
 
-		if($_SERVER['REQUEST_METHOD'] === 'POST') {
-			if(in_array('', $site, true)) {
-				$message = 'Todos los campos deben estar completos';
+		if($Utils->isMethodPost()) {
+			$errors = [];
+			foreach ($site as $key => $value) {
+				if (empty($value)) {
+					$errors[] = "El campo '$key' es obligatorio.";
+					$next = false;
+				}
 			}
-			# Cargamos el archivo de conexion
-			$req = require_once __DIR__ . '/../storage/config.inc.php';
-			
+
+			if (!empty($errors)) {
+				$message = implode('<br>', $errors);
+			}
 			# Iniciamos la conexión con la base de datos
 			try {
-				$mysqli = $utils->dbConnect($req['db']);
-				# Verificamos si hay un theme instalado
-				$result = $mysqli->query("SELECT tid FROM w_temas WHERE tid = 1");
-				if (!$result || $result->num_rows === 0) {
-					$mysqli->query("INSERT INTO `w_temas` (`tid`, `t_name`, `t_url`, `t_path`, `t_copy`) VALUES (1, 'PHPostV4', '{$site['url']}/views/default', 'default', 'Miguel92')");
+				// Solo para saber si exite la tabla y si se puede conectar
+				$DB = new DB($Config->get('db'));
+
+				# Obtenemos el contenido del archivo
+				$filename = file_get_contents($FileConfig);
+				$site['domain'] = str_replace(['https://','http://'], '', $site['url']);
+				# Reemplazamos el contenido por el nuevo
+				foreach($site as $name => $infoData) {
+					$filename = str_replace('{{' . $name . '}}', $infoData, $filename);
+				}
+				# Guardamos el nuevo contenido
+				file_put_contents($FileConfig, $filename);
+
+				# Verificamos la existencias de temas instalados
+				$temas = $DB->select('w_temas', 'tid', ['tid' => 1]);
+				if(count($temas) === 0) {
+					$pathName = 'default';
+					$DB->insert('w_temas', [
+						't_name' => 'PHPostV4', 
+						't_url' => "{$site['url']}/views/$pathName", 
+						't_path' => $pathName, 
+						't_copy' => 'Miguel92', 
+						'tid' => 1
+					]);
 				}
 
-				# Anteriormente se preguntaba si existia un usuario, ya no es necesario
-				$setear = $Globals->slugly($site['titulo']);
+				# Actualizamos la categoría
+				$DB->update('p_categorias', [
+					'c_nombre' => $site['titulo'],
+					'c_seo' => $Utils->slugly($site['titulo']),
+				], ['cid' => 30]);
 
-				// UPDATE
-				$updates = [
-					"UPDATE p_categorias SET c_nombre = '{$site['titulo']}', c_seo = '$setear' WHERE cid = 30",
-					"UPDATE w_config_general SET titulo = '{$site['titulo']}', slogan = '{$site['slogan']}', url = '{$site['url']}', email = '{$site['email']}'",
-					"UPDATE w_config_misc SET pkey = '{$site['pkey']}', skey = '{$site['skey']}', version = '{$config['script']['version']}', version_code = '{$config['script']['version_code']}'"
-				];
-				$error = '';
-				foreach($updates as $k => $update) {
-					if($mysqli->query($update)) {
-						$execute[$k] = 1;
-					} else {
-						$execute[$k] = 0;
-						$error .= '<br/>' . $mysqli->error;
-					}
-				}
+				# Actualizando información del sitio
+				$DB->update('w_config_general', [
+					'titulo' => $site['titulo'],
+					'slogan' => $site['slogan'],
+					'url' => $site['url'],
+					'email' => $site['email']
+				], ['tscript_id' => 1]);
 
-				if (in_array(1, $execute, true) && $_SESSION['TERMS_ACCEPTED'] && $next) {
+				# Actualizando información para el reCaptcha y Versión
+				$DB->update('w_config_misc', [
+					'pkey' => $site['pkey'],
+					'skey' => $site['skey'],
+					'version' => $version,
+					'version_code' => $Utils->slugly($version, '_')
+				], ['tscript_id' => 1]);
+
+				if ($_SESSION['TERMS_ACCEPTED'] && $next) {
 					header("Location: index.php?step=4");
 				} else {
 					$message = $error;
 				}
-	
 			} catch (Exception $e) {
 				$message = $e->getMessage();
 			}
-		}
-	
+		}	
 	break;
 	case 4:
 		if(!$_SESSION['TERMS_ACCEPTED']) header("Location: ./index.php");
-		$user = [
-			'username' => filter_input(INPUT_POST, 'username', FILTER_SANITIZE_SPECIAL_CHARS) ?? '',
-			'password' => filter_input(INPUT_POST, 'password', FILTER_SANITIZE_SPECIAL_CHARS) ?? '',
-			'email' => filter_input(INPUT_POST, 'email', FILTER_VALIDATE_EMAIL) ?? ''
-		];
-
-		if($_SERVER['REQUEST_METHOD'] === 'POST') {
-
-			require_once __DIR__ . '/../core/utils/passwordManager.php';
-			$pm = new PasswordManager(12); 
-
+		$user = $Utils->sanitizer(['username', 'password', 'email']);
+		if($Utils->isMethodPost()) {
 			if(in_array('', $user, true)) {
 				$message = 'Todos los campos deben estar completos';
 				$next = false;
@@ -214,109 +212,107 @@ switch ($step) {
 				$message = 'Introduzca un email correcto.';
 				$next = false;
 			}
+			# Creando la contraseña del usuario
+			require_once __DIR__ . '/../core/utils/passwordManager.php';
+			$pm = new PasswordManager(12);
 			if ($message = $pm->validatePassword($user['password'])) {
 				$next = false;
 			}
 			if($_SESSION['TERMS_ACCEPTED'] && $next) {
-
 				$hash = $pm->hash($user['password']);
 				$fecha = time();
-				# Cargamos el archivo de conexion
-				$req = require_once __DIR__ . '/../storage/config.inc.php';
-				
 				# Iniciamos la conexión con la base de datos
 				try {
 
 					if ($next) {
-						$mysqli = $utils->dbConnect($req['db']);
-						$mysqli->query("INSERT INTO `u_miembros` (`user_name`, `user_password`, `user_email`, `user_rango`, `user_registro`, `user_puntosxdar`, `user_activo`) VALUES ('{$user['username']}', '$hash', '{$user['email']}', 1, $fecha, 50, 1)");
-						$uid = (int)$mysqli->insert_id;
+						// Solo para saber si exite la tabla y si se puede conectar
+						$DB = new DB($Config->get('db'));
 
+						$uid = (int)$DB->insert('u_miembros', [
+							'user_name' => $user['username'], 
+							'user_password' => $hash, 
+							'user_email' => $user['email'], 
+							'user_rango' => 1,
+							'user_registro' => $fecha,
+							'user_puntosxdar' => 50,
+							'user_activo' => 1
+						]);
+				
 						$path_user_uid = "UID_{$uid}";
 				      $directory = __DIR__ . '/../storage/avatar/' . $path_user_uid;
 				      // Crear carpeta si no existe
-				      if (!is_dir($directory)) {
-				         mkdir($directory, 0777, true);
-				         chmod($directory, 0777);
-				      }
+				      mkdir($directory, 0777, true);
+				      chmod($directory, 0777);
+				      
 				      // Generar avatar desde API externa
 				      $download_file = "https://ui-avatars.com/api/?name=" . urlencode($user['username']) . "&background=random&size=180&font-size=0.60&length=2&format=webp";
 				      copy($download_file, $directory . '/default.webp');
 
-						$mysqli->query("INSERT INTO u_perfil (user_id) VALUES ($uid)");
-						$mysqli->query("INSERT INTO u_portal (user_id) VALUES ($uid)");
-						// UPDATE
-						$mysqli->query("UPDATE w_stats SET stats_time_foundation = $fecha, stats_time_upgrade = $fecha WHERE stats_no = 1");
+				      # Insertamos datos necesarios
+				      $DB->insert('u_perfil', ['user_id' => $uid]);
+				      $DB->insert('u_portal', ['user_id' => $uid]);
+						# Actualizamos el tiempo de fundación del sitio
+						$DB->update('w_stats', [
+							'stats_time_foundation' => $fecha,
+							'stats_time_upgrade' => $fecha
+						], ['stats_no' => 1]);
 						// DAMOS BIENVENIDA POR CORREO
-						$Globals->enviar($user['email'],
-						   [
+						$Utils->enviar([
+							'email' => $user['email'],
+							'placeholder' => [
 						      'usuario' => $user['username'],
 						      'contrasena' => $user['password']
 						   ],
-						   'bienvenida',
-						   'Su comunidad ya puede ser usada'
-						);
+						   'plantilla' => 'bienvenida',
+						   'asunto' => 'Su comunidad ya puede ser usada', 
+						   'headers' => $Config->get('mail')
+						]);
 						header("Location: index.php?step=5&uid=" . $uid);
 					} else {
 						$message = $error;
 					}
-		
 				} catch (Exception $e) {
 					$message = $e->getMessage();
 				}
-
 			}
-
 		}
 	break;
 	case 5:
 		if(!$_SESSION['TERMS_ACCEPTED']) header("Location: ./index.php");
-		
 		if($_SESSION['TERMS_ACCEPTED'] && $next) {
 
-			# Cargamos el archivo de conexion
-			$req = require_once __DIR__ . '/../storage/config.inc.php';
-			
 			# Iniciamos la conexión con la base de datos
 			try {
-				$mysqli = $utils->dbConnect($req['db']);
-				$data = $mysqli->query("SELECT titulo, slogan, url FROM w_config_general WHERE tscript_id = 1")->fetch_assoc();
-				$version = $mysqli->query("SELECT version_code FROM w_config_misc WHERE tscript_id = 1")->fetch_assoc();
-				if($_SERVER['REQUEST_METHOD'] === 'POST') {
+				// Solo para saber si exite la tabla y si se puede conectar
+				$DB = new DB($Config->get('db'));
+				$data = $DB->select('w_config_general', ['titulo', 'slogan', 'url'], ['tscript_id' => 1]);
+
+				if($Utils->isMethodPost()) {
 					// CONSULTA
 					$uid = (int)filter_input(INPUT_GET, 'uid', FILTER_SANITIZE_NUMBER_INT) ?? 0;
-					$user = $mysqli->query("SELECT user_name FROM u_miembros WHERE user_id = $uid")->fetch_assoc();
+					$user = $DB->select('u_miembros', 'user_name', ['user_id' => $uid]);
 					// ESTADISTICAS
 					$code = [
 						'title' => $data['titulo'], 
 						'slogan' => $data['slogan'], 
 						'url' => $data['url'], 
-						'version' => $version['version_code'], 
+						'version' => $Utils->slugly($version, '_'), 
 						'admin' => $user['user_name'], 
 						'id' => $uid
 					];
 					$key = base64_encode(serialize($code));
-					// Abrir el archivo en modo de escritura ("w")
-		         $mykey = fopen(__DIR__ . '/../storage/.key', "w");
-		         // Escribir los datos en el archivo
-		         fwrite($mykey, $key);
-		         // Cerrar el archivo
-		         fclose($mykey);
-
-					// Abrir el archivo en modo de escritura ("w")
-		         $handle = fopen(__DIR__ . '/../storage/.lock', "w");
-		         // Escribir los datos en el archivo
-		         fwrite($handle, 'Ha sido instalado y configurado correctamente.');
-		         // Cerrar el archivo
-		         fclose($handle);
+					# Creamos los archivos
+					$Utils->create_file('.key', $key);
+					$Utils->create_file('.lock', 'Ha sido instalado y configurado correctamente.');
+					$Utils->create_file('.version', $Config->get('app.version'));
+					session_unset();
+					session_destroy();
 		         header('Location: ../');
 				}
 			} catch (Exception $e) {
 				$message = $e->getMessage();
 			}
-
 		}
-
 	break;
 }
 
@@ -327,263 +323,240 @@ switch ($step) {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="author" content="PHPost" />
-<title>Instalaci&oacute;n de <?= $config['script']['name'] ?></title>
-<link href="<?= $utils->getUrl('/install/estilo.css') ?>" rel="stylesheet" type="text/css" />
-<link href="<?= $utils->getUrl('/../Cover.png') ?>" rel="icon" type="image/png" sizes="64x64">
+<link href="<?= $Utils->getUrl('/../Cover.png') ?>" rel="icon" type="image/png" sizes="64x64">
+<title>Instalaci&oacute;n de <?= $Config->get('app.name') ?></title>
+<script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+<style type="text/tailwindcss">
+	.pattern {
+	   inset: 0;
+	   z-index: 0;
+	   background-image: 
+	     linear-gradient(to right, #e2e8f0 1px, transparent 1px),
+	     linear-gradient(to bottom, #e2e8f0 1px, transparent 1px);
+	   background-size: 20px 30px;
+	   -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 60%, transparent 100%);
+	   mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, #000 60%, transparent 100%);
+	}
+</style>
 </head>
-<body>
+<body class="min-h-screen w-full bg-[#f8fafc] relative">
 
-	<main>
-		<header>
-			<img src="<?= $utils->getUrl('/../Cover.png') ?>" />
-			<h1>Programa de instalaci&oacute;n: <strong><?= $config['script']['name'] ?></strong></h1>
+	<div class="pattern fixed"></div>
+
+	<main class="w-3xl min-h-screen relative m-auto">
+
+		<header class="flex justify-center items-center relative gap-3 py-8">
+			<img class="aspect-square rounded-full" width="50" height="50" src="<?= $Utils->getUrl('/../Cover.png') ?>" />
+			<h1 class="text-3xl font-bold"><?= $Config->get('app.name') ?></h1>
 		</header>
+
 		<section>
 			<form method="POST">
 				<fieldset>
 					<!-- Inicio -->
-					<?php if($step === 0): ?>
+					<?php if($step === 0):
 
-						<legend>Licencia</legend>
-						<p class="lead">Para utilizar <?= $config['script']['name'] ?> debes estar de acuerdo con nuestra licencia de uso.</p>
-						<textarea rows="15"><?= $license ?></textarea>
-						<div class="buttons">
-							<input type="hidden" name="license" value="true">
-							<input type="submit" value="Acepto"/>
-						</div>
+						echo $Component->legend('Licencia');
+						echo $Component->text("Para utilizar <strong>{$Config->get('app.name')}</strong> debes estar de acuerdo con nuestra licencia de uso."); ?>
+				
+						<textarea class="w-full max-h-max p-4 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none shadow-sm placeholder-gray-400 text-gray-900 bg-white [field-sizing:content]" rows="15"><?= htmlspecialchars($license) ?></textarea>
+						<input type="hidden" name="license" value="true">
+						<?= $Component->button("Aceptar y Continuar");
 
-					<?php elseif($step === 1): ?>
+					elseif($step === 1): 
 
-						<legend>Permisos de escritura</legend>
-						<p class="lead">Los siguientes archivos y directorios requieren de permisos especiales, debes cambiarlos desde tu cliente FTP, los archivos deben tener permiso <strong>666</strong> y los direcorios <strong>777</strong></p>
+						echo $Component->legend('Permisos de escritura');
+						echo $Component->text("Los siguientes archivos y directorios requieren de permisos especiales, debes cambiarlos desde tu cliente FTP, los archivos deben tener permiso <strong>666</strong> y los direcorios <strong>777</strong>");
 
-						<?php foreach($permisos as $key => $permiso): ?>
-							<dl>
-								<dt>
-									<label for="<?= $key ?>"><?= ucfirst($permiso['path']) ?></label>
-									<small><?= $permiso['root'] ?></small>
-								</dt>
-								<dd><span class="status <?= $permiso['status'] ?>" id="<?= $key ?>"><?= ($permiso['status'] === 'success' ? 'Permiso correcto' : 'Dar permiso') ?></span></dd>
-							</dl>
-						<?php endforeach; ?>
+						foreach($permisos as $key => $permiso):
+							$texto = ($permiso['status'] === 'green') ? 'Permiso correcto' : 'Dar permiso';
+							echo $Component->field([
+								'aditional' => "<span class=\"font-bold rounded-md px-4 py-2 text-{$permiso['status']}-800 bg-{$permiso['status']}-200/25\" id=\"$key\">$texto</span>",
+								'for' => $key,
+								'label' => ucfirst(basename($permiso['root'])),
+								'small' => $permiso['root']
+							]);
+						endforeach; 
 
-						<div class="buttons">
-							<input type="submit" value="<?= $next ? 'Continuar &raquo;' : 'Volver a verificar'; ?>"/>
-						</div>
+						echo $Component->button($next ? 'Continuar &raquo;' : 'Volver a verificar');
 
-					<?php elseif($step === 2): ?>
+					elseif($step === 2): 
 
-						<legend>Base de datos</legend>
-						<p class="lead">Ingresa tus datos de conexi&oacute;n a la base de datos.</p>
+						echo $Component->legend('Base de datos');
+						echo $Component->text("Ingresa tus datos de conexi&oacute;n a la base de datos.");
+						echo $Component->message($message);
 
-						<?php if(!empty($message)): ?>
-							<div class="error"><?= $message ?></div>
-						<?php endif; ?>
+						echo $Component->field([
+							'input' => ['type' => 'text','placeholder' => 'localhost','value' => $db['hostname'],'required' => true],
+							'for' => 'hostname',
+							'label' => 'Servidor',
+							'small' => 'Donde est&aacute; la base de datos, ej: <strong>localhost</strong>'
+						]);
 
-						<dl>
-							<dt>
-								<label for="hostname">Servidor:</label>
-								<small>Donde est&aacute; la base de datos, ej: <strong>localhost</strong></small>
-							</dt>
-							<dd><input type="text" autocomplete="off" id="hostname" name="dbhost" placeholder="localhost" value="<?= $db['hostname']; ?>" required/></span></dd>
-						</dl>
-						<dl>
-							<dt>
-								<label for="username">Usuario:</label>
-								<small>El usuario de tu base de datos.</small>
-							</dt>
-							<dd><input type="text" autocomplete="off" id="username" name="dbuser" placeholder="root" value="<?= $db['username']; ?>" required/></span></dd>
-						</dl>
-						<dl>
-							<dt>
-								<label for="password">Contrase&ntilde;a:</label>
-								<small>Para acceder a la base de datos.</small>
-							</dt>
-							<dd><input type="password" autocomplete="off" id="password" name="dbpass" placeholder="******" value="<?= $db['password']; ?>" /></span></dd>
-						</dl>
-						<dl>
-							<dt>
-								<label for="database">Base de datos</label>
-								<small>Nombre de la base de datos para tu web.</small>
-							</dt>
-							<dd><input type="text" autocomplete="off" id="database" name="dbname" placeholder="mydblocalhost" value="<?= $db['database']; ?>" required/></span></dd>
-						</dl>
-						<div class="buttons">
-							<input type="submit" value="Continuar &raquo;"/>
-						</div>
-					
-					<?php elseif($step === 3): ?>
+						echo $Component->field([
+							'input' => ['type' => 'text','placeholder' => 'root','value' => $db['username'],'required' => true],
+							'for' => 'username',
+							'label' => 'Usuario',
+							'small' => 'El usuario de tu base de datos.'
+						]);
 
-						<legend>Datos del sitio</legend>
-						
-						<?php if(!empty($message)): ?>
-							<div class="error"><?= $message ?></div>
-						<?php endif; ?>
+						echo $Component->field([
+							'input' => ['type' => 'password','placeholder' => '******','value' => $db['password']],
+							'for' => 'password',
+							'label' => 'Contrase&ntilde;a',
+							'small' => 'Para acceder a la base de datos.'
+						]); 
 
-						<dl>
-							<dt>
-								<label for="titulo">Nombre:</label>
-								<small>El t&iacute;tulo de tu web.</small>
-							</dt>
-							<dd><input type="text" id="titulo" name="titulo" placeholder="<?= $config['script']['name'] ?>" value="<?= $site['titulo'] ?>" required/></dd>
-						</dl>
-						<dl>
-							<dt>
-								<label for="slogan">Lema:</label>
-								<small>Ej: Inteligencia recargada.</small>
-							</dt>
-							<dd><input type="text" id="slogan" name="slogan" placeholder="<?= $config['script']['slogan'] ?>" value="<?= $site['slogan'] ?>" required/></small></dd>
-						</dl>
-						<dl>
-							<dt>
-								<label for="url">Direcci&oacute;n:</label>
-								<small>Ingresa la url donde  est&aacute; alojada tu web, sin la &uacute;ltima diagonal <strong>/</strong> </small></dt>
-							<dd><input type="text" id="url" name="url" value="<?= $site['url'] ?>" required/></dd>
-						</dl>
-						<dl>
-							<dt>
-								<label for="email">Email:</label>
-								<small>Email de la web o del administrador.</small>
-							</dt>
-							<dd><input type="text" id="email" name="email" placeholder="noreply@example.com" value="<?= $site['email'] ?>" required/></dd>
-						</dl>
-						<legend>Datos de reCAPTCHA</legend>
-						<p class="lead">Obtén tu clave desde <a href="https://www.google.com/recaptcha/admin" target="_blank"><strong>www.google.com/recaptcha/admin</strong></a></p>
-						<dl>
-							<dt>
-								<label for="pkey">Clave pública del sitio:</label>
-							</dt>
-							<dd><input type="text" id="pkey" name="pkey" placeholder="<?= $config['pkey'] ?>" value="<?= $site['pkey'] ?>" required /></dd>
-						</dl>
-						<dl>
-							<dt>
-								<label for="skey">Clave secreta:</label>
-							</dt>
-							<dd><input type="text" id="skey" name="skey" placeholder="<?= $config['skey'] ?>" value="<?= $site['skey'] ?>" required/></dd>
-						</dl>
-						<div class="buttons">
-							<input type="submit" value="Continuar &raquo;"/>
-						</div>
+						echo $Component->field([
+							'input' => ['type' => 'text','placeholder' => 'mydb','value' => $db['database'],'required' => true],
+							'for' => 'database',
+							'label' => 'Base de datos',
+							'small' => 'Nombre de la base de datos para tu web.'
+						]); 
 
-					<?php elseif($step === 4): ?>
+						echo $Component->button('Continuar &raquo;');
 
-						<legend>Datos del administrador</legend>
-						<p class="lead">Ingresa tus datos de usuario, m&aacute;s adelante debes editar tu cuenta para ingresar datos como, fecha de nacimiento, lugar de residencia, etc.</p>
+					elseif($step === 3): 
 
-						<?php if(!empty($message)): ?>
-							<div class="error"><?= $message ?></div>
-						<?php endif; ?>
+						echo $Component->legend('Datos del sitio');
+						echo $Component->message($message);
 
-						<dl>
-							<dt><label for="username">Nombre de usuario:</label></dt>
-							<dd><input type="text" id="username" name="username" autocomplete="off" placeholder="JohnDoe" value="<?= $user['username']; ?>" required/></dd>
-						</dl>
-						<dl>
-							<dt>
-								<label for="email">Email:</label>
-								<small>Ingresa tu direcci&oacute;n de email.</small>
-							</dt>
-							<dd><input type="email" id="email" name="email" autocomplete="off" placeholder="jhondoe@some.com" value="<?= $user['email']; ?>" required/></dd>
-						</dl>
-						<dl>
-							<dt><label for="password">Contrase&ntilde;a:</label></dt>
-							<dd class="flex-col">
-								<div id="strength" class="strength"></div>
-								<input type="text" id="password" name="password" data-password="true" placeholder="#myPassLarge2025" autocomplete="off" value="<?= $user['password']; ?>" required/>
-								<ul id="rules">
-									<li id="symbol" class="invalid">🔒 Contiene al menos un símbolo</li>
-									<li id="uppercase" class="invalid">🔡 Contiene al menos una mayúscula</li>
-									<li id="number" class="invalid">🔢 Contiene al menos un número</li>
-									<li id="length" class="invalid">📏 Mínimo 8 caracteres</li>
-							  </ul>
-							</dd>
-						</dl>
+						echo $Component->field([
+							'input' => [
+								'type' => 'text',
+								'placeholder' => $Config->get('app.name'),
+								'value' => $site['titulo'],
+								'required' => true
+							],
+							'for' => 'titulo',
+							'label' => 'Nombre',
+							'small' => 'El t&iacute;tulo de tu web'
+						]); 
 
-						<div class="buttons">
-							<input type="submit" value="Continuar &raquo;"/>
-						</div>
-						<script>
-							const password = document.getElementById('password');
-							const rules = {
-								symbol: /[^A-Za-z0-9]/,
-								uppercase: /[A-Z]/,
-								number: /\d/,
-								length: /.{8,}/
-							};
+						echo $Component->field([
+							'input' => [
+								'type' => 'text',
+								'placeholder' => $SettingsDefault['slogan'],
+								'value' => $site['slogan'],
+								'required' => true
+							],
+							'for' => 'slogan',
+							'label' => 'Lema / Slogan',
+							'small' => 'Ej: Inteligencia recargada'
+						]); 
 
-							const statusElements = {
-								symbol: document.getElementById('symbol'),
-								uppercase: document.getElementById('uppercase'),
-								number: document.getElementById('number'),
-								length: document.getElementById('length'),
-							};
+						echo $Component->field([
+							'input' => [
+								'type' => 'url',
+								'placeholder' => $Utils->getUrl(),
+								'value' => $site['url'] ?? $Utils->getUrl(),
+								'required' => true
+							],
+							'for' => 'url',
+							'label' => 'Direcci&oacute;n',
+							'small' => 'Ingresa la url donde  est&aacute; alojada tu web, sin la &uacute;ltima diagonal <strong>/</strong> </small>'
+						]); 
 
-							function verificarPassword() {
-								let pass = password.value;
-								let score = 0;
+						echo $Component->field([
+							'input' => [
+								'type' => 'email',
+								'placeholder' => 'noreply@example.com',
+								'value' => $site['email'],
+								'required' => true
+							],
+							'for' => 'email',
+							'label' => 'Email',
+							'small' => 'Email de la web o del administrador'
+						]); 
 
-								for (let rule in rules) {
-									if (rules[rule].test(pass)) {
-										statusElements[rule].classList.remove('invalid');
-										statusElements[rule].classList.add('valid');
-										score++;
-									} else {
-										statusElements[rule].classList.remove('valid');
-										statusElements[rule].classList.add('invalid');
-									}
-								}
+						echo $Component->legend('Datos de reCAPTCHA');
+						echo $Component->text("Obtén tu clave desde <a href=\"https://www.google.com/recaptcha/admin\" target=\"_blank\"><strong>www.google.com/recaptcha/admin</strong></a>");
+						echo $Component->field([
+							'input' => [
+								'type' => 'text',
+								'placeholder' => $SettingsDefault['pkey'],
+								'value' => $site['pkey'],
+								'required' => true
+							],
+							'for' => 'pkey',
+							'label' => 'Clave pública del sitio'
+						]); 
+						echo $Component->field([
+							'input' => [
+								'type' => 'text',
+								'placeholder' => $SettingsDefault['skey'],
+								'value' => $site['skey'],
+								'required' => true
+							],
+							'for' => 'skey',
+							'label' => 'Clave secreta'
+						]); 
+						echo $Component->button('Continuar &raquo;');
 
-								// Visualizar la fuerza de la contraseña
-								const strength = document.getElementById('strength');
-								if (score === 4) {
-									strength.textContent = "✔ Contraseña fuerte";
-									strength.style.color = 'green';
-									password.classList.add('ok');
-									password.classList.remove('fail');
-								} else if (score >= 2) {
-									strength.textContent = "⚠ Contraseña media";
-									strength.style.color = 'orange';
-									password.classList.add('fail');
-									password.classList.remove('ok');
-								} else {
-									strength.textContent = "❌ Contraseña débil";
-									strength.style.color = 'red';
-									password.classList.add('fail');
-									password.classList.remove('ok');
-								}
-							}
+					elseif($step === 4): 
 
-							password.addEventListener('input', () => verificarPassword());
-							window.addEventListener('DOMContentLoaded', () => {
-							if (password.value.trim() !== '') {
-								password.dispatchEvent(new Event('input'));
-							}
-						});
-						</script>
-					
-					<?php elseif($step === 5): ?>
+						echo $Component->legend('Datos del administrador');
+						echo $Component->text("Ingresa tus datos de usuario, m&aacute;s adelante debes editar tu cuenta para ingresar datos como, fecha de nacimiento, lugar de residencia, etc.");
+						echo $Component->message($message);
 
+						echo $Component->field([
+							'input' => [
+								'type' => 'text',
+								'placeholder' => 'JohnDoe',
+								'value' => $user['username'],
+								'required' => true
+							],
+							'for' => 'username',
+							'label' => 'Nombre de usuario'
+						]);
+						echo $Component->field([
+							'input' => [
+								'type' => 'email',
+								'placeholder' => 'jhondoe@some.com',
+								'value' => $user['email'],
+								'required' => true
+							],
+							'for' => 'email',
+							'label' => 'Email',
+							'small' => 'Ingresa tu direcci&oacute;n de email'
+						]);
+						echo $Component->field([
+							'input' => [
+								'type' => 'text',
+								'placeholder' => '#myPassLarge2025',
+								'value' => $user['password'],
+								'required' => true
+							],
+							'for' => 'password',
+							'label' => 'Contrase&ntilde;a',
+							'data-password' => 'true',
+							'optional' => "<ul id=\"rules\" class=\"text-xs mt-2\">
+								<li id=\"symbol\" class=\"invalid\">🔒 Contiene al menos un símbolo</li>
+								<li id=\"uppercase\" class=\"invalid\">🔡 Contiene al menos una mayúscula</li>
+								<li id=\"number\" class=\"invalid\">🔢 Contiene al menos un número</li>
+								<li id=\"length\" class=\"invalid\">📏 Mínimo 8 caracteres</li>
+							</ul>"
+						]);
+						echo $Component->button('Continuar &raquo;');
+						echo $Component->script($Utils->getUrl('/install/password_strong.js'));
 
-						<h2>💚 ¡Gracias por instalar <?= $config['script']['name'] ?>!</h2>
+					elseif($step === 5): 
 
-						<p class="lead">Tu nueva comunidad <strong>Link Sharing System</strong> ya está lista para comenzar a compartir.</p>
-						<p class="lead">Iniciá sesión con tus datos y explorá este espacio que sigue vivo gracias al esfuerzo de quienes creemos que aún vale la pena.<br>Esta actualización fue creada con dedicación, cariño y la firme decisión de no dejar morir algo que aún tiene mucho por dar.<br>No te olvides de <a href="http://github.com/isidromlc/PHPost" target="_blank" style="font-weight: 600;">visitarnos</a> para estar al tanto de futuras mejoras, y si encontrás algún error, ¡avisanos! Así seguimos creciendo, entre todos.</p>
-						<p class="lead" style="text-align: center;">¡Bienvenido de nuevo a la comunidad que nunca se rinde! ✊</p>
-					
-						<div class="buttons">
-							<input type="submit" value="Finalizar" />
-						</div>
-						<!-- ESTADISTICAS -->
-						<div class="error">Ingresa a tu FTP y borra la carpeta <strong><?php echo basename(getcwd()); ?></strong> antes de usar el script.</div>
+						echo $Component->legend("💚 ¡Gracias por instalar {$Config->get('app.name')}!");
+						echo $Component->text("Tu nueva comunidad <strong>Link Sharing System</strong> ya está lista para comenzar a compartir."); 
+						echo $Component->text("Iniciá sesión con tus datos y explorá este espacio que sigue vivo gracias al esfuerzo de quienes creemos que aún vale la pena.<br>Esta actualización fue creada con dedicación, cariño y la firme decisión de no dejar morir algo que aún tiene mucho por dar.<br>No te olvides de <a href=\"http://github.com/isidromlc/PHPost\" target=\"_blank\" style=\"font-weight: 600;\">visitarnos</a> para estar al tanto de futuras mejoras, y si encontrás algún error, ¡avisanos! Así seguimos creciendo, entre todos."); 
+						echo $Component->text("¡Bienvenido de nuevo a la comunidad que nunca se rinde! ✊"); 
+						echo $Component->button('Finalizar instalación');
+						echo $Component->message("Ingresa a tu FTP y borra la carpeta <strong>".basename(getcwd())."</strong> antes de usar el script."); 
 
-					<?php endif; ?>
+					endif; ?>
 					<!-- Fin -->
 				</fieldset>
 			</form>
 		</section>
-		<footer>
-			<p>Powered by <a href="https://github.com/joelmiguelvalente" target="_blank">Miguel92</a></p>
-			<small>Versión actual: v<strong><?= $Globals->getVersion('version') ?></strong></small>
+		<footer class="flex justify-center items-center flex-col py-4">
+			<p>Powered by <a class="font-bold text-blue-800" href="https://github.com/joelmiguelvalente" target="_blank">Miguel92</a></p>
+			<small class="text-sm">Versión actual: v<strong class="text-blue-800"><?= $Config->get('app.version') ?></strong></small>
 		</footer>
 	</main>
 	

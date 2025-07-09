@@ -16,7 +16,7 @@ $PB = new PageBootstrap('acceso', 1, $container->get('tsCore'), $container->get(
 $page = filter_input(INPUT_GET, 'page', FILTER_UNSAFE_RAW) ?? '';
 $PB->title = ($page === 'iniciar' ? "Bienvenidos a " : "Crea tu cuenta en ") . $tsCore->settings['titulo'];
 
-if($tsUser->is_member) header("Location: {$tsCore->setRoutes()['url']}");
+if($tsUser->is_member) header("Location: {$tsCore->setRoutes('url')}");
 
 if($PB->canContinue()) {
 
@@ -29,7 +29,7 @@ if($PB->canContinue()) {
 	   $smarty->assign([
 	      "ApiUrl" => "https://google.com/recaptcha/api.js?render=" . $Publickey,
 	      "reCAPTCHA_site_key" => $Publickey,
-	      "tsAbierto" => $container->get('tsCore')->settings["c_reg_active"]
+	      "tsAbierto" => $tsCore->settings["c_reg_active"]
 	   ]);
 		
 	} else {

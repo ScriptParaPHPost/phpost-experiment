@@ -55,6 +55,6 @@ switch($action){
 		}
 	break;
 	case 'login-salir':
-		echo $tsAuthentication->logoutUser($tsUser->uid, $tsCore->setRoutes()['url']);
+		echo $tsAuthentication->logoutUser($tsUser->uid, $tsCore->setRoutes('url'));
 	break;
 }

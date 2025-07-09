@@ -6,9 +6,12 @@
  * Clase Paginator
  * Maneja la lógica de paginación de manera segura y flexible.
  * 
- * @author    PHPost Team
- * @license   MIT
- */
+ * @author      PHPost Team
+ * @copyright   2025
+ * @link        http://github.com/isidromlc/PHPost
+ * @link        http://github.com/joelmiguelvalente
+ * @link        https://www.linkedin.com/in/joelmiguelvalente/
+*/
 
 class Paginator {
 
